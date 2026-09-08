@@ -2,10 +2,11 @@
 
 > Handoff document for Claude Code sessions. Read at session start; update after meaningful work.
 
-**Last updated:** 2026-09-08
+**Last updated:** 2026-09-08T16:33
 **Repository:** `D:\Repository\document-intelligence-analytics`
-**Git branch:** `main` (baseline commit d0b73ad)
+**Git branch:** `main` (baseline commit d0b73ad, packaging changes pending)
 **Python runtime:** Python 3.12.10 at `C:\Users\Akansh\AppData\Local\Programs\Python\Python312\python`
+**Package:** `document-intelligence-analytics` v0.1.0 (editable install)
 
 ---
 
@@ -160,8 +161,6 @@ Checked 31509 traces and 1202267 events.
 
 | Blocker/Risk | Impact | Mitigation |
 |--------------|--------|------------|
-| No `src` package installation | `python scripts/run_data_quality.py` fails with `ModuleNotFoundError: No module named 'src'` | Add `pyproject.toml` with `[project]` and `pip install -e .` in Phase 4 |
-| `master` vs `main` branch naming | Current branch is `master`; GitHub default is typically `main` | Rename branch before first push or configure repo default |
 | Docker not running | PostgreSQL service not started | Start with `docker compose up -d postgres` when needed |
 | `.env` not created | Database credentials missing | Copy `.env.example` to `.env` and configure before Phase 4 |
 
@@ -229,12 +228,14 @@ tests/test_quality_pipeline.py
 
 ## Exact Next Action
 
-**After this commit:**
+**Phase 4: Database schema design and PostgreSQL setup**
 
-1. Create `pyproject.toml` with minimal `[project]` metadata
-2. Run `pip install -e .` to make `src` importable
-3. Rename `master` → `main` if preferred
-4. Start Phase 4: Database schema design and PostgreSQL setup
+1. Review existing schema design in `docs/` (if any)
+2. Create SQL migration files in `sql/` for initial tables
+3. Define event_log, case, and extension tables
+4. Verify Docker Compose PostgreSQL starts
+5. Run initial migrations
+6. Update PROJECT_STATUS.md with Phase 4 status
 
 ---
 
@@ -254,13 +255,22 @@ tests/test_quality_pipeline.py
 
 | Date | Phase | Action | Result |
 |------|-------|--------|--------|
-| 2026-09-08 | 1-3 | Initial setup, data acquisition, quality pipeline | All phases complete, tests passing, ready for commit |
+| 2026-09-08T16:26 | 1-3 | Initial setup, data acquisition, quality pipeline | All phases complete, tests passing, ready for commit |
 | 2026-09-08T16:30 | — | Baseline commit | Commit d0b73ad on `main` branch, 36 files, 1073 lines added |
+| 2026-09-08T16:33 | — | Create `pyproject.toml`, editable install | Package installed, pipeline runs without workaround |
 
 **Session Output**
 
 ```
-commit d0b73ad (HEAD -> main)
-chore: establish project foundation through phase 3
-36 files changed, 1073 insertions(+)
+# pyproject.toml created with [project] metadata
+python -m pip install -e .
+Successfully installed document-intelligence-analytics-0.1.0
+
+# Pipeline now works without sys.path workaround
+python scripts/run_data_quality.py
+Checked 31509 traces and 1202267 events.
+
+# Tests pass
+pytest tests/test_quality_pipeline.py -v
+1 passed in 0.07s
 ```

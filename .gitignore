@@ -35,6 +35,10 @@ models/
 Thumbs.db
 .DS_Store
 
+# Build artifacts
+*.egg-info/
+*.egg
+
 # Power BI local artifacts
 *.pbix
 *.pbit
