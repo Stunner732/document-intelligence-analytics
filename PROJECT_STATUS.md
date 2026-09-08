@@ -2,11 +2,11 @@
 
 > Handoff document for Claude Code sessions. Read at session start; update after meaningful work.
 
-**Last updated:** 2026-09-08T16:33
+**Last updated:** 2026-09-08T16:38
 **Repository:** `D:\Repository\document-intelligence-analytics`
-**Git branch:** `main` (baseline commit d0b73ad, packaging changes pending)
+**Git branch:** `main` (3 commits)
 **Python runtime:** Python 3.12.10 at `C:\Users\Akansh\AppData\Local\Programs\Python\Python312\python`
-**Package:** `document-intelligence-analytics` v0.1.0 (editable install)
+**Package:** `document-intelligence-analytics` v0.1.0 (editable install, pyproject.toml)
 
 ---
 
@@ -153,7 +153,7 @@ Checked 31509 traces and 1202267 events.
 
 5. **LLM integration deferred:** Hermes Desktop integration delayed until analytics layer exists and host exposure method can be inspected.
 
-6. **No `PYTHONPATH` modification:** Pipeline execution uses inline `sys.path.insert` workaround; proper solution is `pip install -e .` (not yet done).
+6. **`pyproject.toml` editable install:** Project is now an installed package (`pip install -e .`); `python scripts/run_data_quality.py` runs without workarounds.
 
 ---
 
@@ -169,10 +169,10 @@ Checked 31509 traces and 1202267 events.
 ## Current Git State
 
 ```
-Branch: main (committed)
-Latest commit: d0b73ad chore: establish project foundation through phase 3
-Commits: 1
-Working tree: clean (modified: PROJECT_STATUS.md pending)
+Branch: main
+Latest commit: 9edf560 chore: add pyproject.toml for editable install and update .gitignore
+Commits: 3
+Working tree: clean (modified: PROJECT_STATUS.md pending — handoff update)
 Staged files: 0
 Untracked files: 0
 
@@ -182,9 +182,11 @@ Ignored (verified):
 - .venv/
 - __pycache__/
 - .env (does not exist yet)
+- *.egg-info/ — document_intelligence_analytics.egg-info/ now ignored
+- *.egg
 ```
 
-**Committed files (36):**
+**Committed files (37):**
 ```
 .env.example
 .gitignore
@@ -228,14 +230,13 @@ tests/test_quality_pipeline.py
 
 ## Exact Next Action
 
-**Phase 4: Database schema design and PostgreSQL setup**
+**Begin Phase 4: Database schema design and PostgreSQL setup**
 
-1. Review existing schema design in `docs/` (if any)
-2. Create SQL migration files in `sql/` for initial tables
-3. Define event_log, case, and extension tables
-4. Verify Docker Compose PostgreSQL starts
-5. Run initial migrations
-6. Update PROJECT_STATUS.md with Phase 4 status
+1. Create `.env` from `.env.example` with local PostgreSQL credentials
+2. Start Docker Compose PostgreSQL service
+3. Design and create SQL migration files for event-log tables
+4. Implement schema creation/verification
+5. Update PROJECT_STATUS.md with Phase 4 progress
 
 ---
 
@@ -258,6 +259,7 @@ tests/test_quality_pipeline.py
 | 2026-09-08T16:26 | 1-3 | Initial setup, data acquisition, quality pipeline | All phases complete, tests passing, ready for commit |
 | 2026-09-08T16:30 | — | Baseline commit | Commit d0b73ad on `main` branch, 36 files, 1073 lines added |
 | 2026-09-08T16:33 | — | Create `pyproject.toml`, editable install | Package installed, pipeline runs without workaround |
+| 2026-09-08T16:38 | — | Packaging commit | Commit 9edf560, 3 files changed, 72 insertions |
 
 **Session Output**
 
