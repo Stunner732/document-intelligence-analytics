@@ -1,0 +1,18 @@
+{
+  "dataset_name": "BPI Challenge 2017",
+  "source_type": "public real-life process event log",
+  "publisher": "Eindhoven University of Technology / 4TU.ResearchData",
+  "creator": "Boudewijn van Dongen",
+  "citation": "van Dongen, Boudewijn (2017). BPI Challenge 2017. 4TU.ResearchData. Dataset. https://doi.org/10.4121/uuid:5f3067df-f10b-45da-b98b-86ae4c7a310b",
+  "landing_page": "https://data.4tu.nl/articles/dataset/BPI_Challenge_2017/12696884",
+  "license": "4TU General Terms of Use",
+  "source_file": "BPI_Challenge_2017.xes.gz",
+  "download_url": "https://ndownloader.figshare.com/files/24044117",
+  "expected_bytes": 29658747,
+  "expected_md5": "10b37a2f78e870d78406198403ff13d2",
+  "format": "XES compressed with gzip",
+  "time_coverage": "2016-01-01/2017-02-01",
+  "retrieved_utc": "2026-09-08",
+  "local_storage": "data/raw/BPI_Challenge_2017.xes.gz",
+  "git_tracking": "ignored; downloaded source data is not committed"
+}
