@@ -395,19 +395,13 @@ Not implemented (dependencies may exist but functionality does not):
 - **Data quality** — Non-destructive streaming pipeline with 12 rules, bounded examples, quarantine manifest, JSON/Markdown reports.
 - **Database** — PostgreSQL 16 with 6-table schema, foreign keys, indexes, schema version tracking (`001`, `002`), migration utilities.
 - **SQL analytics** — 13 regular views (`view_*`) + 4 materialized views (`mv_*`), covering metrics, throughput, activities, resources, lifecycle, loan goals, event sequences, time-series, processing buckets, and offer analysis.
-- **Python analytics** — 13 typed query functions (`get_*`) consuming existing SQL views; no SQL duplication.
+- **Python analytics** — 14 typed query functions (`get_*`) consuming existing SQL views; no SQL duplication.
 - **Analytics export** — CSV + Parquet batch export for 8 datasets; manifest tracking; output directory `reports/generated/analytics/`.
 - **Visualization** — 8 chart functions (KPI tiles, bar, line, donut, grouped bar); PNG batch generation; consistent style; manifest tracking; output directory `reports/generated/plots/`.
-- **Testing** — 214 automated tests across all layers, zero regressions.
-
-### Planned / Possible Future Work (Not Implemented)
-
-- **Power BI dashboard** — Live connection or `.pbix` import using the CSV/Parquet exports produced by Phase 6.2.
-- **Interactive reporting** — Web-based or embedded dashboards (separate from the non-interactive PNG outputs).
-- **Process mining** — Deeper event-sequence analysis using `view_event_sequence` (already implemented as SQL) for process discovery models.
-- **Expanded analytics** — Rework-cycle detection, trend forecasting, additional time-series modeling.
-- **Document intelligence layer** — Potential future integration of AI/ML components for document classification, automated processing analysis, or synthetic field population. The `synthetic_extensions` table and `docs/synthetic-extension.md` document the design, but no ML pipeline, model, or LLM component exists.
-- **AI Copilot / Natural-language queries** — Deferred until analytics layer exists; no local LLM endpoint configured.
+- **Apache Superset BI Dashboards** — 3 published dashboards (IDs 1, 2, 3) with 28 verified charts and native multi-dataset filters.
+- **Synthetic Metadata Population** — Seed-controlled (`seed=42`) generator populating 31,509 cases in `synthetic_extensions` with audit logging in `data_loads`.
+- **Predictive ML Pipeline** — At-start SLA risk classification & cycle-time regression model (`SLARiskPredictor`) with feature leakage guardrails and persistent artifacts.
+- **Testing** — 238 automated tests across all layers, zero regressions.
 
 ---
 
@@ -420,11 +414,15 @@ Not implemented (dependencies may exist but functionality does not):
 | Phase 3 — Data Quality | ✅ Complete | `quality_pipeline.py` (1 test); 31,509 traces, 1,202,267 events, 0 quarantined |
 | Phase 4 — Database | ✅ Complete | `sql/001_create_schema.sql` (6 tables); 17 tests passing; PostgreSQL 16.15 native |
 | Phase 5 — SQL Analytics | ✅ Complete | `sql/002_analytics_views.sql` (13 views + 4 materialized); 33 tests passing |
-| Phase 6.1 — Python Query | ✅ Complete | `queries.py` (13 functions); 50 tests passing |
+| Phase 6.1 — Python Query | ✅ Complete | `queries.py` (14 functions); 50 tests passing |
 | Phase 6.2 — Analytics Export | ✅ Complete | `export.py` (8 datasets, CSV/Parquet, batch, manifest); 55 tests passing |
 | Phase 6.3 — Visualization | ✅ Complete | `visualization.py` (8 charts, PNG, batch, manifest); 58 tests passing |
+| Phase 7.1–7.4 — Apache Superset | ✅ Complete | 3 published dashboards (IDs 1, 2, 3), 28 verified charts, FastMCP verified |
+| Phase 8.1 — Synthetic Population | ✅ Complete | `synthetic_generator.py` & `populate_synthetic_extensions.py` (31,509 rows) |
+| Phase 8.2 — Predictive ML Pipeline | ✅ Complete | `feature_engineering.py` & `sla_predictor.py` (6 unit tests, joblib artifact) |
 
-**Total tests:** 214 passed. Zero failures. Zero regressions.
+**Total tests:** 238 passed. Zero failures. Zero regressions.
+
 
 ---
 

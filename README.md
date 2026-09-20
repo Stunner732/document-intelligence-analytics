@@ -396,8 +396,11 @@ After running `plot_all()`, PNG charts are saved to `reports/generated/plots/`:
 | 6.1 | Python Query Layer | Complete |
 | 6.2 | Analytics Export | Complete |
 | 6.3 | Analytics Visualization | Complete |
+| 7.1–7.4 | Apache Superset BI Dashboards | Complete |
+| 8.1 | Synthetic Operational Extension Population | Complete |
+| 8.2 | ML SLA Risk & Cycle Time Predictive Pipeline | Complete |
 
-**Phases 1 through 6.3 are fully implemented and verified with 214/214 tests passing.**
+**Phases 1 through 8.2 are fully implemented and verified with 238/238 tests passing.**
 
 ## Future Scope
 
