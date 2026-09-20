@@ -645,3 +645,45 @@ def get_executive_summary() -> dict[str, Any]:
             'distinct_resources': distinct_resources,
             'application_types': application_types,
         }
+
+
+def get_synthetic_extension_metrics() -> dict[str, Any]:
+    """Get aggregate metrics for synthetic operational extension metadata.
+
+    Source: synthetic_extensions table
+
+    Returns:
+        Dict with total records, priority distribution, average quality score,
+        and branch breakdown.
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM synthetic_extensions")
+        total_records = cur.fetchone()[0]
+
+        cur.execute("SELECT AVG(quality_score) FROM synthetic_extensions")
+        avg_quality = cur.fetchone()[0]
+
+        cur.execute("""
+            SELECT priority, COUNT(*)
+            FROM synthetic_extensions
+            GROUP BY priority
+            ORDER BY priority;
+        """)
+        priority_rows = cur.fetchall()
+
+        cur.execute("""
+            SELECT branch, COUNT(*)
+            FROM synthetic_extensions
+            GROUP BY branch
+            ORDER BY COUNT(*) DESC
+            LIMIT 5;
+        """)
+        branch_rows = cur.fetchall()
+
+        return {
+            "total_records": total_records,
+            "avg_quality_score": float(avg_quality) if avg_quality else 0.0,
+            "priority_distribution": {row[0]: row[1] for row in priority_rows},
+            "top_branches": [{'branch': row[0], 'count': row[1]} for row in branch_rows],
+        }
+
