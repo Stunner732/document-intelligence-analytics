@@ -1,24 +1,37 @@
-# Operations Analytics Pipeline — Loan Application Process Analysis
+# Operations Analytics & Predictive Intelligence Pipeline — Loan Process Analysis
 
-An end-to-end analytics pipeline that ingests a real-world loan application event log (31,509 applications, 1.2M events), validates data quality, loads it into PostgreSQL, and produces analytical insights through SQL views, Python queries, CSV/Parquet exports, and matplotlib visualizations.
+A **portfolio-grade process analytics and predictive intelligence platform** built around the real-world **BPI Challenge 2017** loan application event log (31,509 applications, 1,202,267 workflow events) augmented with seed-controlled synthetic operational metadata.
 
-Built to demonstrate practical data analytics skills: data quality engineering, database design, SQL analytics, Python data pipelines, export automation, and operational KPI visualization.
+The pipeline ingests raw XML event logs, audits data quality with a non-destructive 12-rule parser, loads relational records into an indexed PostgreSQL 16 database, computes operational metrics via 13 core analytical views, 2 predictive views, and 4 materialized views, exports multi-format analytics, generates visualization charts, serves 3 published BI dashboards in Apache Superset, trains baseline machine learning models (`SLARiskPredictor`) for SLA breach risk and cycle-time prediction, and exposes live predictive inference via a 9-endpoint FastAPI REST service.
+
+> **Status:** Implementation status: Phases 1–9.5D complete · **312 / 312 Pytest Tests Passing** (100% test suite pass rate).
 
 ---
 
 ## Overview
 
-This project takes a real operational dataset — the [BPI Challenge 2017](https://data.4tu.nl/articles/dataset/BPI_Challenge_2017/12696884) loan application event log from a Dutch financial institution — and builds a complete analytics stack around it.
+This project takes a real operational dataset — the [BPI Challenge 2017](https://data.4tu.nl/articles/dataset/BPI_Challenge_2017/12696884) loan application event log from a Dutch financial institution — and builds a complete analytics, machine learning, and API stack around it.
 
-The pipeline answers practical business questions about operational performance: How many applications are processed each month? Where do bottlenecks occur? How long do applications take to complete? Which resources handle the most workload? What are the most common outcomes?
+To evaluate process scenarios where organizational attributes (such as document types, page counts, branches, and operator teams) are missing from raw event logs, the platform incorporates a seed-controlled (`seed=42`) synthetic extension generator (`synthetic_extensions`).
 
-Each layer is independently testable, and the entire system runs against real data, not synthetic placeholders.
+The pipeline answers practical business questions about operational performance:
+- How many applications are processed each month, and how does throughput fluctuate?
+- Where do operational bottlenecks occur, and which workflow activities dominate?
+- How long do applications take to complete across duration categories?
+- Which resources handle the highest workload volume?
+- Which incoming loan applications exhibit high risk of SLA breach or extended turnaround duration?
+
+Each layer is independently testable, built on actual operational event data combined with documented synthetic extension metadata, and supported by a comprehensive test suite.
+
+---
 
 ## Business Problem
 
-Financial institutions process thousands of loan applications through multi-step workflows involving validation, offer generation, and lifecycle management. Understanding operational performance — volume trends, processing times, resource utilization, and outcome distribution — is essential for identifying bottlenecks and improving throughput.
+Financial institutions process thousands of loan applications through multi-step workflows involving validation, offer generation, customer calls, and lifecycle management. Understanding operational performance — volume trends, processing times, resource utilization, outcome distributions, and turnaround risk — is essential for capacity planning and process optimization.
 
-This project analyzes 13 months of loan application events (January 2016 – February 2017) to answer questions a data or operations analyst would ask when reviewing process performance.
+This project analyzes 13 months of loan application events (January 2016 – February 2017) to provide operational process intelligence, diagnostic SQL views, BI dashboards, and early-warning predictive signals for operations managers.
+
+---
 
 ## Key Questions Answered
 
@@ -28,405 +41,425 @@ This project analyzes 13 months of loan application events (January 2016 – Feb
 - How long do applications take to process, and what is the typical duration bucket?
 - Which workflow activities generate the most events?
 - How is workload distributed across resources (staff/system actors)?
-- What are the lifecycle outcomes (complete, suspend, withdraw)?
+- What are the lifecycle outcomes (complete, suspend, withdraw, abort)?
 - How do different loan purposes compare in volume and processing time?
+- Which incoming applications are at risk of exceeding median processing turnaround times?
 
-## Dataset
+---
 
-| Attribute | Value |
-|-----------|-------|
-| **Source** | [BPI Challenge 2017](https://doi.org/10.4121/uuid:5f3067df-f10b-45da-b98b-86ae4c7a310b) |
-| **Publisher** | Eindhoven University of Technology / 4TU.ResearchData |
+## Dataset & Synthetic Metadata Disclosures
+
+### Real Event Log Data (BPI Challenge 2017)
+
+| Attribute | Observed Value |
+| :--- | :--- |
+| **Source** | [BPI Challenge 2017](https://doi.org/10.4121/uuid:5f3067df-f10b-45da-b98b-86ae4c7a310b) (Eindhoven University of Technology / 4TU.ResearchData) |
 | **Format** | XES event log (gzip-compressed XML) |
-| **Time coverage** | January 2016 – February 2017 |
+| **Time coverage** | January 2016 – February 2017 (13 months) |
 | **Applications** | 31,509 unique loan application cases |
 | **Events** | 1,202,267 workflow events |
-| **Application types** | New credit, Limit raise |
-| **Activities** | 26 distinct workflow activities (W\_/O\_/A\_ prefixes) |
+| **Application types** | New credit (89.3%), Limit raise (10.7%) |
+| **Activities** | 26 distinct workflow activities (`W_`, `O_`, `A_` prefixes) |
 | **Resources** | 149 anonymized actors/systems |
 | **License** | 4TU General Terms of Use |
 
 The raw XES file is not committed to Git. Provenance metadata is tracked in [`data/source_manifest.json`](data/source_manifest.json), and a download script with checksum verification is provided.
 
+### Synthetic Operational Metadata Disclosure
+
+> [!IMPORTANT]
+> **Synthetic Extensions Disclosure:** Attributes stored in table `synthetic_extensions` (`document_type`, `page_count`, `branch`, `operator_team`, `priority`, `region`, `channel`, `quality_score`, `sla_target_hours`) are **seed-controlled (`seed=42`) synthetic operational fields** generated deterministically to model operational context missing from raw BPI event logs.
+> **They are NOT observed bank data.** They are strictly isolated in `synthetic_extensions` and explicitly tagged in audit lineage metadata as `synthetic`.
+
+---
+
 ## Solution Architecture
 
 ```mermaid
-flowchart LR
-    A["Raw XES Event Log<br/>31,509 apps · 1.2M events"] --> B["Data Quality<br/>Pipeline"]
-    B --> C[("PostgreSQL 16<br/>6 tables · indexes")]
-    C --> D["SQL Analytics<br/>13 views · 4 materialized"]
-    D --> E["Python Query<br/>Layer · 13 functions"]
-    E --> F["Export<br/>CSV · Parquet · manifests"]
-    E --> G["Visualization<br/>8 chart types · PNG"]
-    F --> H["BI / Dashboard<br/>consumption"]
-    G --> H
+flowchart TD
+    subgraph Data & Quality Layer
+        A["Raw XES Event Log (BPI Challenge 2017)"] --> B["Streaming Quality Pipeline (12 Rules)"]
+        B -->|Quarantine Manifest| B1["Audit Summary Reports"]
+    end
+
+    subgraph Relational Data Storage (PostgreSQL 16)
+        B -->|Clean Ingestion| C["Base Tables (applications, events, offers)"]
+        C --> C1["13 Core SQL Analytics Views & 4 Materialized Views"]
+        C --> C2["synthetic_extensions Table (seed=42)"]
+    end
+
+    subgraph Machine Learning & Batch Scoring Materialization
+        C1 & C2 --> ML["ML SLA Predictor Pipeline (src/ml/sla_predictor.py)"]
+        ML -->|Serialized Artifact| Joblib["models/sla_predictor.joblib"]
+        ML -->|Batch UPSERT| PredTable[("application_predictions Table\nComposite PK: (app_id, model_version)")]
+        PredTable --> DualViews["2 Predictive SQL Views (view_predictive_sla_risk_latest)"]
+    end
+
+    subgraph Analytics, BI, & API Layer
+        C1 --> PyQuery["Python Analytics Layer (src/analytics/queries.py)"]
+        PyQuery --> Export["Export Pipeline (CSV / Parquet)"]
+        PyQuery --> Viz["Visualization Generator (Matplotlib / Seaborn)"]
+        DualViews & C1 --> Superset["Apache Superset BI (3 Dashboards · 28 Charts)"]
+        DualViews & Joblib --> FastAPI["FastAPI REST Service (api/main.py · 9 Endpoints)"]
+    end
 ```
 
-Each layer consumes the output of the previous layer. The Python query layer never duplicates SQL — it reads from views. Exports and visualizations both consume the query layer, producing portable artifacts.
+---
 
 ## Technology Stack
 
 | Category | Technologies |
-|----------|-------------|
-| **Database** | PostgreSQL 16.15 |
-| **SQL** | Analytical views, materialized views, window functions, aggregations |
-| **Python** | 3.11+, psycopg 3, SQLAlchemy 2.0, pandas, NumPy |
-| **Data quality** | Streaming XES parser (xml.etree), 12-rule validation catalog |
-| **Export** | CSV (UTF-8), Parquet (PyArrow) |
-| **Visualization** | Matplotlib, Seaborn (non-interactive Agg backend) |
-| **Configuration** | pydantic-settings, python-dotenv, Docker Compose (database) |
-| **Testing** | pytest, pytest-cov |
-| **Packaging** | pyproject.toml, setuptools (editable install) |
+| :--- | :--- |
+| **Database** | PostgreSQL 16.15 (Native / Podman) |
+| **SQL Engine** | 13 core analytics views, 2 predictive views, 4 materialized views, window functions, composite primary keys |
+| **Python** | Python 3.12, `psycopg3`, SQLAlchemy 2.0, `pandas`, `numpy`, `scipy` |
+| **Data Quality** | Streaming XES parser (`xml.etree.ElementTree`), 12-rule validation catalog |
+| **Export Formats**| CSV (UTF-8), Parquet (PyArrow columnar compression) |
+| **Visualization**| Matplotlib, Seaborn (non-interactive `Agg` backend) |
+| **Business Intelligence** | Apache Superset 6.1.0 (Podman, FastMCP server connected) |
+| **Machine Learning** | `scikit-learn` (`ColumnTransformer`, `HistGradientBoostingClassifier`, `HistGradientBoostingRegressor`) |
+| **REST API** | FastAPI 0.110+, Uvicorn, Pydantic v2 schemas |
+| **Configuration** | `pydantic-settings`, `python-dotenv`, Docker Compose |
+| **Testing** | `pytest`, `pytest-cov` |
 
-## Data Quality
+---
 
-The quality pipeline uses a non-destructive, streaming approach — it reads the compressed XES file via `iterparse` without loading the full 1.2M events into memory.
+## Data Quality Pipeline
+
+The quality pipeline (`src/cleaning/quality_pipeline.py`) uses a non-destructive, streaming approach — reading compressed XES event logs via `iterparse` without loading the full 1.2M events into memory.
 
 **12 validation rules** cover:
+- **Identity**: Missing trace/event IDs, duplicate IDs.
+- **Timestamps**: Null timestamps, non-monotonic sequences, impossible durations.
+- **Content**: Missing activities.
+- **Scope**: Orphaned events, synthetic field presence.
+- **Aggregation**: Trace counts, event counts, bounded rule examples.
 
-| Category | Checks |
-|----------|--------|
-| **Identity** | Missing trace/event IDs, duplicate IDs |
-| **Timestamps** | Null timestamps, non-monotonic sequences, impossible durations |
-| **Content** | Missing activities |
-| **Scope** | Orphaned events (no matching trace), synthetic field presence |
-| **Aggregation** | Trace counts, event counts, bounded examples per rule |
-
-**Verified results against the BPI Challenge 2017 data:**
-
+**Verified Quality Results (BPI Challenge 2017 Dataset):**
 - 31,509 traces checked
 - 1,202,267 events checked
 - 0 quarantine candidates
 - 0 error or warning rule violations
 
-Issues are reported in a quarantine manifest for review — the pipeline never deletes or mutates records.
+Quarantine manifests report issues without deleting or mutating records.
+
+---
 
 ## Database & SQL Analytics
 
-### Schema (6 tables)
+### Base Schema (7 Tables)
 
-| Table | Purpose |
-|-------|---------|
-| `applications` | One row per loan application (31,509 rows) |
-| `events` | One row per workflow event (1,202,267 rows, FK to applications) |
-| `offers` | Optional offer records per application |
-| `synthetic_extensions` | Reserved for future synthetic operational fields (currently empty) |
-| `data_loads` | Import lineage tracking |
-| `schema_versions` | Migration version history |
+| Table | Primary Key | Purpose |
+| :--- | :--- | :--- |
+| `applications` | `application_id` | One row per loan application (31,509 rows) |
+| `events` | `event_id` | One row per workflow event (1,202,267 rows, FK to `applications`) |
+| `offers` | `offer_id` | Validated offer records per application |
+| `synthetic_extensions` | `application_id` | Seed-controlled operational extension fields (31,509 rows) |
+| `application_predictions`| `(application_id, model_version)` | Composite PK table persisting batch ML model predictions (31,509 rows) |
+| `data_loads` | `load_id` | Import lineage and audit logging |
+| `schema_versions` | `version` | Migration version history (`001`, `002`, `003`) |
 
-Foreign keys enforce referential integrity. Indexes support common query patterns (application lookups, time-range queries, resource filtering).
+### SQL Analytics Views (13 Core Views + 2 Predictive Views + 4 Materialized Views)
 
-### SQL Analytics (13 views + 4 materialized views)
+| View Name | Type | Analytical Purpose |
+| :--- | :--- | :--- |
+| `view_application_metrics` | Core View | Per-application processing duration, event counts, lifecycle counts |
+| `view_daily_throughput` | Core View | Daily application and event volume |
+| `view_activity_summary` | Core View | Activity frequency, type classification, lifecycle percentages |
+| `view_resource_workload` | Core View | Resource utilization and workload distribution |
+| `view_application_type_metrics` | Core View | Metrics grouped by application type |
+| `view_loan_goal_metrics` | Core View | Metrics grouped by loan purpose |
+| `view_lifecycle_transition_metrics` | Core View | Outcome distribution (complete/suspend/withdraw/abort) |
+| `view_event_origin_metrics` | Core View | Event origin analysis |
+| `view_monthly_summary` | Core View | Monthly aggregated volume and performance |
+| `view_weekly_summary` | Core View | Weekly aggregated volume |
+| `view_event_sequence` | Core View | Event sequence with window functions (`LEAD`/`LAG`) |
+| `view_processing_time_buckets` | Core View | Applications by duration category |
+| `view_offer_analysis` | Core View | Offer lifecycle metrics |
+| `view_predictive_sla_risk` | Predictive View | Historical predictive view preserving multi-version model predictions |
+| `view_predictive_sla_risk_latest` | Predictive View | Operational predictive view at single-row per application grain |
+| `mv_activity_summary` | Materialized View | Pre-computed activity aggregation |
+| `mv_resource_workload` | Materialized View | Pre-computed resource utilization |
+| `mv_monthly_summary` | Materialized View | Pre-computed monthly trends |
+| `mv_application_type_summary` | Materialized View | Pre-computed application type metrics |
 
-| View | Analytical Purpose |
-|------|-------------------|
-| `view_application_metrics` | Per-application processing duration, lifecycle counts |
-| `view_daily_throughput` | Daily application and event volume |
-| `view_activity_summary` | Activity frequency, type classification, lifecycle percentages |
-| `view_resource_workload` | Resource utilization and workload distribution |
-| `view_application_type_metrics` | Metrics grouped by application type |
-| `view_loan_goal_metrics` | Metrics grouped by loan purpose |
-| `view_lifecycle_transition_metrics` | Outcome distribution (complete/suspend/withdraw) |
-| `view_event_origin_metrics` | Event origin analysis |
-| `view_monthly_summary` | Monthly aggregated volume and performance |
-| `view_weekly_summary` | Weekly aggregated volume |
-| `view_event_sequence` | Event sequence with window functions (next/previous activity) |
-| `view_processing_time_buckets` | Applications by duration category |
-| `view_offer_analysis` | Offer lifecycle metrics |
+---
 
-**Materialized views** (`mv_activity_summary`, `mv_resource_workload`, `mv_monthly_summary`, `mv_application_type_summary`) pre-compute heavy aggregations for faster repeated queries.
+## Machine Learning & Predictive SLA Risk Pipeline (Phase 8 & 9)
 
-## Python Analytics
+### Baseline Operational Model Architecture (`SLARiskPredictor`)
 
-The Python query layer (`src/analytics/queries.py`) provides **13 typed functions** that consume SQL views and return structured Python dicts/lists:
+The predictive engine (`src/ml/sla_predictor.py`) implements an **experimental operational early-warning baseline model** designed to identify incoming applications at risk of exceeding median turnaround duration.
 
-| Function | Returns | Purpose |
-|----------|---------|---------|
-| `get_total_applications()` | `int` | Application count |
-| `get_total_events()` | `int` | Event count |
-| `get_application_volume_by_type()` | `list[dict]` | Metrics by application type |
-| `get_application_volume_over_time()` | `list[dict]` | Monthly/daily volume trends |
-| `get_processing_duration_metrics()` | `dict` | Average duration, median bucket, distribution |
-| `get_processing_time_distribution()` | `list[dict]` | Application count by duration bucket |
-| `get_activity_summary()` | `list[dict]` | Activity frequency and lifecycle analysis |
-| `get_resource_workload()` | `list[dict]` | Resource utilization distribution |
-| `get_lifecycle_outcome_summary()` | `list[dict]` | Outcome distribution |
-| `get_loan_goal_summary()` | `list[dict]` | Metrics by loan purpose |
-| `get_application_processing_metrics()` | `list[dict]` | Per-application detail |
-| `get_executive_summary()` | `dict` | Aggregated KPI summary |
+> [!NOTE]
+> **Not a Credit Scoring Model:** This model predicts workflow cycle-time risk and operational turnaround duration for SLA capacity planning. It does NOT evaluate credit risk, creditworthiness, or financial underwriting eligibility.
 
-All functions use the existing views — no SQL duplication, no hardcoded credentials.
+### Feature Leakage Guardrails
+- **At-Start Feature Extraction (`get_application_features_for_inference`)**: Model features are extracted strictly at application submission ($t_0$).
+- **Excluded Features**: Downstream event counts, activity durations, and lifecycle event names occurring after application submission are strictly excluded to prevent target leakage.
+- **At-Start Feature Set**: 6 real source predictors (`requested_amount`, `application_type`, `loan_goal`, `submission_hour`, `submission_day_of_week`, `submission_month`).
 
-## Analytics Export
+### Empirical Evaluation Metrics
 
-The export module (`src/analytics/export.py`) converts query results into portable file formats:
+Evaluated via 5-fold cross-validation and 20% holdout test set (6,302 cases, fixed seed `42`):
 
-| Feature | Detail |
-|---------|--------|
-| **Formats** | CSV (UTF-8) and Parquet (columnar, compressed) |
-| **Datasets** | 8 analytical datasets (executive summary, volume by type, volume over time, activity summary, resource workload, lifecycle outcomes, loan goals, processing time) |
-| **Batch export** | `export_all()` produces all datasets with a manifest |
-| **Manifest** | `get_export_manifest()` scans output directory for metadata |
-| **Output** | `reports/generated/analytics/` (Git-ignored, reproducible) |
+| Evaluation Metric | Dummy Baseline | Model A: Real-Only Features (6 Predictors) | Model B: Full Features (15 Predictors) |
+| :--- | :--- | :--- | :--- |
+| **Holdout ROC-AUC** (20% Test) | 0.5000 | **0.5840** | **0.5878** |
+| **Holdout PR-AUC** (20% Test) | 0.5000 | **0.5746** | **0.5768** |
+| **Holdout F1-Score** | 0.5000 | **0.5748** | **0.5760** |
+| **Holdout Precision** | 0.5000 | **0.5820** | **0.5840** |
+| **Holdout MAE (Days)** | 15.3400 days | **10.3802 days** | **10.3854 days** |
+| **Holdout RMSE (Days)** | 22.6133 days | **13.7220 days** | **13.7383 days** |
 
-CSV files are ready for Power BI import. Parquet files preserve types and compress well for larger datasets.
+### Model Performance Analysis & Limitations
+- **Classification Signal**: At application submission ($t_0$), initial case attributes (`requested_amount`, `application_type`, `loan_goal`) provide modest predictive discrimination (ROC-AUC 0.5840 vs Dummy 0.5000), reflecting that much of loan processing duration is driven by downstream customer response times and manual verification steps.
+- **Regression Accuracy**: In holdout evaluation, the regressor achieved a Mean Absolute Error of **10.38 days** compared to **15.34 days** for the dummy median baseline (and RMSE of 13.72 days vs 22.61 days for the dummy baseline).
+- **Synthetic Noise**: Feature ablation proved that adding synthetic extension fields improves classification ROC-AUC by only $+0.0038$, confirming that synthetic fields act primarily as statistical noise relative to actual duration.
 
-## Visualization
+---
 
-The visualization module (`src/analytics/visualization.py`) generates **8 chart types** using Matplotlib and Seaborn:
+## FastAPI REST Service & Live Inference (Phase 9.5)
 
-| Function | Chart Type | Insight |
-|----------|-----------|---------|
-| `plot_executive_summary()` | KPI stat tiles (2×2 grid) | Headline metrics at a glance |
-| `plot_application_volume_by_type()` | Horizontal bar | Application type distribution |
-| `plot_application_volume_over_time()` | Line chart (dual axis) | Volume trends with event overlay |
-| `plot_activity_summary()` | Horizontal bar (top 10) | Most frequent workflow activities |
-| `plot_resource_workload()` | Horizontal bar (top 20) | Resource utilization comparison |
-| `plot_lifecycle_outcomes()` | Donut chart | Process outcome distribution |
-| `plot_loan_goal_summary()` | Grouped bar (dual axis) | Applications vs. processing time by loan purpose |
-| `plot_processing_time_distribution()` | Vertical bar | Duration bucket distribution |
+The REST API service (`api/main.py`) exposes **9 GET endpoints** for predictive analytics summaries and live single-application SLA risk inference.
 
-All charts use a consistent style (seaborn-whitegrid, 120 DPI, HUSL palette), the non-interactive `Agg` backend, and return metadata with file paths and sizes. Batch generation via `plot_all()` produces all charts with a manifest.
+| Endpoint Path | Response Schema | Purpose |
+| :--- | :--- | :--- |
+| `/health` | `HealthResponse` | Root health check (handles DB status gracefully) |
+| `/api/v1/health` | `HealthResponse` | Versioned health check endpoint |
+| `/api/v1/predict/risk/{application_id}` | `LiveInferenceResponse` | Live SLA risk classification & cycle-time inference using trained model |
+| `/api/v1/predictive/coverage` | `PredictionCoverageResponse` | Total vs. scored application coverage |
+| `/api/v1/predictive/risk-distribution` | `RiskDistributionResponse` | Binned high-risk vs. low-risk distribution counts |
+| `/api/v1/predictive/probability-bands` | `RiskProbabilityBandsResponse` | Binned probability band counts (0.0–0.2 to 0.8–1.0) |
+| `/api/v1/predictive/processing-time-summary` | `PredictedProcessingTimeSummaryResponse` | Predicted processing duration summary (mean, median, min, max) |
+| `/api/v1/predictive/prediction-error-summary` | `PredictionErrorSummaryResponse` | Retrospective prediction error metrics (MAE, RMSE, mean error) |
+| `/api/v1/predictive/high-risk` | `HighRiskApplicationsResponse` | Configurable high-risk application queue sorted deterministically |
+
+### Interactive OpenAPI Documentation
+When the service is running, interactive OpenAPI Swagger documentation is available at `http://localhost:8000/docs`.
+
+---
+
+## Apache Superset BI Integration (Phase 7 & 9.4)
+
+Published interactive BI dashboards in Apache Superset 6.1.0 running on `http://localhost:8088`:
+
+1. **Dashboard ID 1: Executive Operations & Predictive SLA Risk** (9 charts, 3 native filters) — `http://localhost:8088/superset/dashboard/1/`
+2. **Dashboard ID 2: Process Performance Analytics** (11 charts, 3 native filters) — `http://localhost:8088/superset/dashboard/2/`
+3. **Dashboard ID 3: Resource & Workload Distribution** (8 charts, 1 native filter) — `http://localhost:8088/superset/dashboard/3/`
+
+All 28 charts execute cleanly against registered PostgreSQL datasets without SQL errors.
+
+---
+
+## Python Analytics, Exports, & Visualizations
+
+### Typed Python Query Layer (`src/analytics/queries.py` & `predictive_analytics.py`)
+Provides **20 typed query functions** (14 operational query functions + 6 predictive query functions) consuming SQL views without SQL duplication.
+
+### Analytics Export (`src/analytics/export.py`)
+Generates 8 analytical datasets in CSV (UTF-8) and Parquet (PyArrow columnar compression) formats under `reports/generated/analytics/` with metadata manifests.
+
+### Visualizations (`src/analytics/visualization.py`)
+Generates 8 static chart types (KPI stat tiles, bar, line, donut, grouped bar) using Matplotlib and Seaborn under `reports/generated/plots/`.
+
+---
 
 ## Key Analytical Insights
 
-The pipeline enables analysis of:
+- **Activity Concentration**: The top 3 activities (`W_Validate application`, `W_Call after offers`, `W_Call incomplete files`) account for nearly 50% of all 1.2M workflow events.
+- **Duration Bucket Distribution**: Over 92% of applications take more than 24 hours to process, with 57.9% taking 1–4 weeks and 35.0% taking >4 weeks.
+- **Workload Concentration**: Operational workload is concentrated, with top individual resources handling a significant share of total events.
+- **Application Type Breakdown**: New credit applications dominate (89.3%), requiring higher average event counts (38.5 events/app) than Limit raise applications (35.0 events/app).
 
-- **Application type distribution** — New credit and Limit raise applications have different volumes, average event counts, and processing durations
-- **Volume trends** — Monthly application volume shows how the lending process fluctuates over the 13-month observation period
-- **Processing time patterns** — Applications fall into distinct duration buckets (sub-hour to 4+ weeks), revealing typical cycle times
-- **Activity concentration** — A small number of workflow activities account for the majority of events across all applications
-- **Resource workload imbalance** — Event handling is distributed unevenly across the 149 resources, with workload percentages varying significantly
-- **Lifecycle outcomes** — The complete/suspend/withdraw distribution shows how applications typically resolve
-- **Loan goal differences** — Different loan purposes show different application volumes and processing time profiles
+---
 
 ## Testing & Quality Assurance
 
+```bash
+.venv/bin/pytest tests/ -v
+======================== 312 passed in 414.56s ========================
 ```
-pytest tests/ -q
-======================= 214 passed in 649.68s =======================
-```
 
-**214/214 tests passing — zero regressions.**
+**312 / 312 tests passing — 100% test suite success rate.**
 
-| Layer | Tests | Coverage |
-|-------|-------|----------|
-| Data quality pipeline | 1 | Streaming parser, rule catalog |
-| Database schema & loader | 17 | Connection, migrations, table verification |
-| SQL analytics views | 33 | View existence, row counts, query results |
-| Python query layer | 50 | All 13 query functions, type consistency, edge cases |
-| Analytics export | 55 | CSV/Parquet export, batch, manifests, roundtrip verification |
-| Analytics visualization | 58 | All 8 chart functions, batch generation, manifest, empty handling |
+| Subsystem / Layer | Test Module | Test Count | Scope & Verification |
+| :--- | :--- | :--- | :--- |
+| **Data Quality Pipeline** | `test_quality_pipeline.py` | 1 | 12-rule streaming parser, quarantine manifests |
+| **Database Schema** | `test_database.py` | 17 | Connection management, migrations, table constraints |
+| **SQL Analytics Views** | `test_sql_analytics.py` | 33 | 13 analytical views, 4 materialized views, refresh logic |
+| **Python Analytics Query** | `test_analytics_queries.py` | 50 | 14 typed query functions, type consistency |
+| **Analytics Export** | `test_analytics_export.py` | 55 | CSV/Parquet batch export, metadata manifests |
+| **Analytics Visualization**| `test_analytics_visualization.py` | 58 | 8 Matplotlib chart functions, batch PNG generation |
+| **Synthetic Metadata** | `test_synthetic_generator.py` | 16 | Seed-controlled determinism (`seed=42`), schema rules |
+| **Synthetic Population** | `test_populate_synthetic_extensions.py` | 11 | Batch population idempotency, audit load logging |
+| **ML Predictive Pipeline** | `test_ml_pipeline.py` | 6 | SLA risk classifier, duration regressor, joblib artifacts |
+| **Predictive SQL Views** | `test_predictive_views.py` | 11 | `application_predictions` table, dual-grain views |
+| **Predictive Queries** | `test_predictive_queries.py` | 4 | At-start feature extraction, batch inference |
+| **Predictive Analytics** | `test_predictive_analytics.py` | 17 | 6 predictive query functions, filters, error summaries |
+| **FastAPI Foundation** | `test_api_foundation.py` | 12 | App metadata, health checks, CORS, Pydantic validation |
+| **FastAPI Predictive API** | `test_api_predictive.py` | 11 | 6 predictive analytics GET endpoints, error scenarios |
+| **FastAPI Live Inference** | `test_api_inference.py` | 6 | Live inference endpoint, HTTP 404/422/500 handling |
 
-Tests run against a live PostgreSQL instance with the full BPI 2017 dataset loaded.
+---
 
 ## Project Structure
 
-```
+```text
 document-intelligence-analytics/
+├── api/
+│   ├── __init__.py
+│   ├── main.py                     # FastAPI application & health routes
+│   ├── schemas.py                  # Pydantic v2 response models
+│   └── routes/
+│       ├── __init__.py
+│       ├── predictive.py           # 6 predictive summary endpoints
+│       └── inference.py            # Live single-application risk endpoint
 ├── data/
 │   ├── raw/                        # Raw XES file (Git-ignored)
-│   └── source_manifest.json        # Dataset provenance and checksum
-├── sql/
-│   ├── 001_create_schema.sql       # Database migration: 6 tables
-│   └── 002_analytics_views.sql     # Migration: 13 views + 4 materialized views
-├── src/
-│   ├── __init__.py
-│   ├── config.py                   # pydantic-settings configuration
-│   ├── database.py                 # Connection management, migrations
-│   ├── cleaning/
-│   │   └── quality_pipeline.py     # Non-destructive XES quality checks
-│   └── analytics/
-│       ├── views.py                # View management, materialized view refresh
-│       ├── queries.py              # 13 Python query functions
-│       ├── export.py               # CSV/Parquet export module
-│       └── visualization.py        # Matplotlib/Seaborn chart generation
-├── tests/
-│   ├── test_quality_pipeline.py
-│   ├── test_database.py
-│   ├── test_sql_analytics.py
-│   ├── test_analytics_queries.py
-│   ├── test_analytics_export.py
-│   └── test_analytics_visualization.py
+│   └── source_manifest.json        # Dataset provenance and MD5 checksum
+├── docs/
+│   ├── architecture.md             # Architecture specification
+│   ├── PHASE_1_TO_8_COMPLETE_LEARNING_GUIDE.md  # Master guide (Phases 1–8)
+│   ├── PHASE_9_COMPLETE_LEARNING_GUIDE.md       # Master guide (Phase 9)
+│   └── phase_8_*.md                # ML evaluation & ablation reports
+├── models/
+│   └── sla_predictor.joblib        # Serialized ML model artifact (Git-ignored)
+├── notebooks/
+│   ├── 01_analytics_walkthrough.ipynb # Interactive analytics notebook
+│   └── create_nb.py                # Notebook generator script
+├── reports/
+│   └── generated/                  # Exported datasets, plots, and quality reports
 ├── scripts/
 │   ├── download_bpi_2017.ps1       # Dataset downloader with checksum
-│   ├── run_data_quality.py         # Execute quality pipeline
 │   ├── init_database.py            # Initialize PostgreSQL schema
 │   ├── load_xes_to_db.py           # Load XES data into PostgreSQL
-│   └── refresh_views.py            # Refresh materialized views
-├── docs/
-│   ├── architecture.md
-│   ├── dataset.md
-│   ├── data-dictionary.md
-│   ├── data-quality.md
-│   ├── synthetic-extension.md
-│   └── phase-*.md                  # Phase completion documentation
-├── reports/
-│   └── generated/                  # Exported analytics and plots (Git-ignored)
-├── pyproject.toml
-├── requirements.txt
-├── docker-compose.yml
-├── .env.example
-└── .gitignore
+│   ├── refresh_views.py            # Refresh materialized views
+│   ├── populate_synthetic_extensions.py # Populate synthetic extensions
+│   └── populate_predictive_scores.py   # Materialize ML batch scores
+├── sql/
+│   ├── 001_create_schema.sql       # Database migration: base tables
+│   ├── 002_analytics_views.sql     # Migration: 13 views + 4 materialized views
+│   └── 003_predictive_views.sql     # Migration: predictions table & dual views
+├── src/
+│   ├── config.py                   # pydantic-settings configuration
+│   ├── database.py                 # Connection management & migrations
+│   ├── cleaning/
+│   │   ├── quality_pipeline.py     # Non-destructive XES quality checks
+│   │   └── synthetic_generator.py  # Seed-controlled synthetic generator
+│   ├── ml/
+│   │   ├── feature_engineering.py  # At-start feature extraction matrix
+│   │   └── sla_predictor.py        # ML SLA risk predictor model
+│   └── analytics/
+│       ├── queries.py              # 14 typed query functions
+│       ├── predictive_analytics.py # 6 predictive summary functions
+│       ├── predictive_queries.py   # Inference feature queries
+│       ├── export.py               # CSV/Parquet export module
+│       └── visualization.py        # Matplotlib/Seaborn chart generation
+├── tests/                          # 12 test modules (312 tests passing)
+├── pyproject.toml                  # Dependencies & pytest options
+├── docker-compose.yml              # PostgreSQL 16 container definition
+└── .gitignore                      # Ignore rules
 ```
 
-## Getting Started
+---
 
-### Prerequisites
+## Getting Started & Operational Execution Guide
 
+### 1. Prerequisites
 - Python 3.11 or newer
-- PostgreSQL 16 (or use Docker Compose)
-- PowerShell (for the download script)
+- PostgreSQL 16 (or Podman / Docker Compose)
+- PowerShell (for dataset download script)
 
-### 1. Clone and set up
-
+### 2. Environment Setup
 ```bash
 git clone https://github.com/<your-username>/document-intelligence-analytics.git
 cd document-intelligence-analytics
+
 python -m venv .venv
-.venv\Scripts\activate          # Windows
+source .venv/bin/activate        # Linux/macOS
+# .venv\Scripts\activate          # Windows
+
 pip install -e ".[dev]"
 ```
 
-### 2. Download the dataset
-
+### 3. Dataset Download & Verification
 ```powershell
 .\scripts\download_bpi_2017.ps1
 ```
+Downloads `BPI_Challenge_2017.xes.gz` to `data/raw/` and verifies MD5 checksum.
 
-Downloads `BPI_Challenge_2017.xes.gz` to `data/raw/` and verifies the MD5 checksum.
-
-### 3. Configure the database
-
-Copy `.env.example` to `.env` and update credentials if needed. Either start PostgreSQL via Docker Compose:
-
+### 4. Database Initialization & Data Loading
 ```bash
+# Start PostgreSQL via Docker Compose
 docker compose up -d postgres
-```
 
-Or use a local PostgreSQL 16 installation.
-
-### 4. Initialize and load data
-
-```bash
+# Initialize schema, load XES event log, and build analytics views
 python scripts/init_database.py
 python scripts/load_xes_to_db.py
-```
-
-### 5. Create analytics views
-
-```bash
 psql -U document_app -d document_intelligence -f sql/002_analytics_views.sql
+python scripts/refresh_views.py
 ```
 
-### 6. Run analytics
-
-```python
-from src.analytics.queries import get_executive_summary
-summary = get_executive_summary()
-print(f"Total applications: {summary['total_applications']:,}")
-print(f"Total events: {summary['total_events']:,}")
-```
-
-### 7. Export datasets
-
-```python
-from src.analytics.export import export_all
-manifest = export_all()
-print(f"Exported {manifest['total_files']} files")
-```
-
-### 8. Generate visualizations
-
-```python
-from src.analytics.visualization import plot_all
-manifest = plot_all()
-print(f"Generated {manifest['total_figures']} charts in {manifest['output_dir']}")
-```
-
-### 9. Run tests
-
+### 5. Synthetic Metadata & Batch ML Scoring Materialization
 ```bash
-pytest tests/ -v
+# Populate synthetic extensions table (31,509 cases, seed=42)
+python scripts/populate_synthetic_extensions.py
+
+# Apply predictive SQL schema migration
+psql -U document_app -d document_intelligence -f sql/003_predictive_views.sql
+
+# Run batch ML prediction materialization script
+python scripts/populate_predictive_scores.py --model-version v1.0
 ```
 
-## Example Outputs
+### 6. Launch FastAPI REST Service
+```bash
+uvicorn api.main:app --reload --port 8000
+```
+- API Health Check: `http://localhost:8000/health`
+- Interactive OpenAPI Swagger Documentation: `http://localhost:8000/docs`
+- Live Inference Endpoint: `http://localhost:8000/api/v1/predict/risk/Application_1`
 
-### Exported Datasets
+### 7. Run Test Suite
+```bash
+.venv/bin/pytest tests/ -v
+```
 
-After running `export_all()`, the following files are generated in `reports/generated/analytics/`:
+---
 
-| File | Format | Content |
-|------|--------|---------|
-| `executive_summary.csv` / `.parquet` | CSV, Parquet | Headline KPIs (1 row) |
-| `application_volume_by_type.csv` / `.parquet` | CSV, Parquet | Application count by type |
-| `application_volume_by_monthly.csv` / `.parquet` | CSV, Parquet | Monthly volume trends |
-| `application_volume_by_daily.csv` / `.parquet` | CSV, Parquet | Daily volume trends |
-| `activity_summary.csv` / `.parquet` | CSV, Parquet | Activity frequency (26 rows) |
-| `resource_workload.csv` / `.parquet` | CSV, Parquet | Resource utilization (149 rows) |
-| `lifecycle_outcomes.csv` / `.parquet` | CSV, Parquet | Outcome distribution |
-| `loan_goal_summary.csv` / `.parquet` | CSV, Parquet | Metrics by loan purpose |
-| `processing_time_distribution.csv` / `.parquet` | CSV, Parquet | Duration bucket distribution |
+## Project Limitations & Interview Disclosure Notes
 
-### Generated Charts
+1. **Synthetic Operational Fields**: Attributes in `synthetic_extensions` (`priority`, `quality_score`, `branch`, `operator_team`) are seed-controlled (`seed=42`) synthetic operational fields to model multi-channel loan attributes missing from raw event logs. They are **not** observed bank data.
+2. **At-Start Feature Guardrails**: Risk predictions use only initial case attributes known at submission ($t_0$) to prevent target leakage. Downstream event counts or activity durations are strictly excluded from inference features.
+3. **Operational Early Warning Scope**: The machine learning model (`SLARiskPredictor`) is a baseline experimental model for operational capacity planning and SLA early warning. It does **not** evaluate credit risk or loan underwriting decisions.
+4. **Local Execution**: BI dashboards require a local Apache Superset instance connected to PostgreSQL, and REST API endpoints require running the Uvicorn server locally.
 
-After running `plot_all()`, PNG charts are saved to `reports/generated/plots/`:
+---
 
-- `executive_summary.png` — KPI stat tiles
-- `application_volume_by_type.png` — Type distribution bar chart
-- `application_volume_over_time_monthly.png` — Monthly trend line
-- `application_volume_over_time_daily.png` — Daily trend line
-- `activity_summary.png` — Top activities bar chart
-- `resource_workload.png` — Resource utilization chart
-- `lifecycle_outcomes.png` — Outcome donut chart
-- `loan_goal_summary.png` — Loan purpose comparison
-- `processing_time_distribution.png` — Duration distribution bar chart
+## Documentation Index & Learning Guides
 
-> Generated outputs are Git-ignored. Run the pipeline to produce them locally.
+For detailed technical walk-throughs, architectural deep-dives, and interview Q&A guides, refer to:
+- [`docs/PHASE_1_TO_8_COMPLETE_LEARNING_GUIDE.md`](docs/PHASE_1_TO_8_COMPLETE_LEARNING_GUIDE.md) — Master guide covering data engineering, PostgreSQL schemas, SQL views, Superset BI setup, and ML pipeline design.
+- [`docs/PHASE_9_COMPLETE_LEARNING_GUIDE.md`](docs/PHASE_9_COMPLETE_LEARNING_GUIDE.md) — Master guide covering batch prediction materialization, dual predictive views, FastAPI REST API reference, and capstone interview defense notes.
+- [`docs/architecture.md`](docs/architecture.md) — Full technical architecture specification.
+- [`docs/phase_8_2c_model_evaluation_audit.md`](docs/phase_8_2c_model_evaluation_audit.md) — Detailed ML evaluation metrics and baseline comparisons.
 
-## Project Status
-
-| Phase | Name | Status |
-|-------|------|--------|
-| 1 | Foundation | Complete |
-| 2 | Data Acquisition | Complete |
-| 3 | Data Quality | Complete |
-| 4 | PostgreSQL Database | Complete |
-| 5 | SQL Analytics Views | Complete |
-| 6.1 | Python Query Layer | Complete |
-| 6.2 | Analytics Export | Complete |
-| 6.3 | Analytics Visualization | Complete |
-| 7.1–7.4 | Apache Superset BI Dashboards | Complete |
-| 8.1 | Synthetic Operational Extension Population | Complete |
-| 8.2 | ML SLA Risk & Cycle Time Predictive Pipeline | Complete |
-
-**Phases 1 through 8.2 are fully implemented and verified with 238/238 tests passing.**
-
-## Future Scope
-
-- **Power BI dashboard** — Connect directly to the CSV/Parquet exports for interactive operational reporting
-- **Additional KPI presentation** — Executive dashboards, SLA monitoring, trend alerts
-- **Expanded analytics** — Process mining, rework cycle detection, trend forecasting
-- **Document intelligence layer** — Potential future integration of AI/ML components for document classification and automated processing analysis
+---
 
 ## Skills Demonstrated
 
-| Area | What was built |
-|------|---------------|
-| **SQL** | 13 analytical views, 4 materialized views, window functions, aggregations, schema design |
-| **PostgreSQL** | Database design with foreign keys, indexes, schema versioning, migration management |
-| **Python** | Typed query layer, streaming parsers, export automation, visualization pipelines |
-| **Data quality** | Non-destructive validation pipeline, quarantine workflow, 12-rule catalog |
-| **Data modeling** | Star-schema design (applications, events, offers), materialized view strategy |
-| **ETL/pipelines** | XES ingestion, database loading, batch export, batch visualization |
-| **Process analytics** | Throughput analysis, cycle-time measurement, bottleneck identification |
-| **KPI development** | Executive summaries, volume trends, outcome distribution, resource utilization |
-| **Data visualization** | 8 chart types (bar, line, donut, grouped bar, KPI tiles), consistent styling |
-| **Export automation** | CSV and Parquet generation with manifests and metadata tracking |
-| **Testing** | 214 automated tests across all layers, type validation, edge case coverage |
-| **Business analysis** | Operational process understanding, analytical question framing, insight communication |
-| **Reproducibility** | Version-controlled schema, documented setup, checksummed data acquisition |
+- **Data Quality Engineering**: Non-destructive streaming XML parsing (`iterparse`), 12-rule validation catalog, quarantine manifests.
+- **Database Engineering**: PostgreSQL 16 schema design, index optimization, composite primary keys, migration tracking.
+- **Advanced SQL Analytics**: 13 core analytics views, 2 predictive views, 4 materialized views, window functions (`LEAD`/`LAG`), time-bucket aggregations.
+- **Python Analytics & Export**: Typed query interfaces, automated CSV/Parquet columnar exports, Matplotlib/Seaborn visualization.
+- **Business Intelligence**: Apache Superset dashboard publishing, dataset registrations, FastMCP server integration.
+- **Machine Learning & Feature Engineering**: Scikit-learn pipelines, at-start feature extraction matrices, target leakage prevention, cross-validation, feature ablation.
+- **REST API Development**: FastAPI, Pydantic v2 validation schemas, OpenAPI documentation, live single-case inference.
+- **Software Testing**: Pytest test suite engineering (**312 tests passing**, 100% success rate).
+
+---
 
 ## Conclusion
 
-This project demonstrates a complete data analytics pipeline — from raw event log ingestion through database design, SQL analytics, Python querying, file export, and visualization — all built on real operational data with full test coverage. It shows the practical skills needed to take raw process data and turn it into actionable operational insights.
+This project demonstrates a complete data analytics, machine learning, and API platform — from raw event log ingestion through relational database design, SQL analytics, Python querying, BI dashboarding, ML SLA risk modeling, and REST API delivery. Built on real operational data with complete test coverage, it demonstrates the practical capabilities required to convert raw workflow logs into structured operational insights and predictive signals.
