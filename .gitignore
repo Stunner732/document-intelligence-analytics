@@ -31,6 +31,7 @@ models/
 # Editor and operating-system files
 .vscode/
 .idea/
+.claude/
 *.swp
 Thumbs.db
 .DS_Store
