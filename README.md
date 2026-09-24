@@ -394,7 +394,11 @@ pip install -e ".[dev]"
 ```
 
 ### 3. Dataset Download & Verification
-```powershell
+```bash
+# Cross-Platform Python Downloader
+python scripts/download_bpi_2017.py
+
+# Windows PowerShell Alternative
 .\scripts\download_bpi_2017.ps1
 ```
 Downloads `BPI_Challenge_2017.xes.gz` to `data/raw/` and verifies MD5 checksum.
@@ -425,7 +429,7 @@ python scripts/populate_predictive_scores.py --model-version v1.0
 
 ### 6. Launch FastAPI REST Service
 ```bash
-uvicorn api.main:app --reload --port 8000
+uv run uvicorn api.main:app --reload --port 8000
 ```
 - API Health Check: `http://localhost:8000/health`
 - Interactive OpenAPI Swagger Documentation: `http://localhost:8000/docs`
