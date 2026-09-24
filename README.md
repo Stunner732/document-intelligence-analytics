@@ -77,30 +77,33 @@ The raw XES file is not committed to Git. Provenance metadata is tracked in [`da
 
 ```mermaid
 flowchart TD
-    subgraph Data & Quality Layer
+    subgraph Quality ["Data & Quality Layer"]
         A["Raw XES Event Log (BPI Challenge 2017)"] --> B["Streaming Quality Pipeline (12 Rules)"]
         B -->|Quarantine Manifest| B1["Audit Summary Reports"]
     end
 
-    subgraph Relational Data Storage (PostgreSQL 16)
+    subgraph Storage ["Relational Data Storage (PostgreSQL 16)"]
         B -->|Clean Ingestion| C["Base Tables (applications, events, offers)"]
         C --> C1["13 Core SQL Analytics Views & 4 Materialized Views"]
         C --> C2["synthetic_extensions Table (seed=42)"]
     end
 
-    subgraph Machine Learning & Batch Scoring Materialization
-        C1 & C2 --> ML["ML SLA Predictor Pipeline (src/ml/sla_predictor.py)"]
+    subgraph ML_Sec ["Machine Learning & Batch Scoring Materialization"]
+        C1 --> ML["ML SLA Predictor Pipeline (src/ml/sla_predictor.py)"]
+        C2 --> ML
         ML -->|Serialized Artifact| Joblib["models/sla_predictor.joblib"]
         ML -->|Batch UPSERT| PredTable[("application_predictions Table\nComposite PK: (app_id, model_version)")]
         PredTable --> DualViews["2 Predictive SQL Views (view_predictive_sla_risk_latest)"]
     end
 
-    subgraph Analytics, BI, & API Layer
+    subgraph API_BI ["Analytics, BI, & API Layer"]
         C1 --> PyQuery["Python Analytics Layer (src/analytics/queries.py)"]
         PyQuery --> Export["Export Pipeline (CSV / Parquet)"]
         PyQuery --> Viz["Visualization Generator (Matplotlib / Seaborn)"]
-        DualViews & C1 --> Superset["Apache Superset BI (3 Dashboards · 28 Charts)"]
-        DualViews & Joblib --> FastAPI["FastAPI REST Service (api/main.py · 9 Endpoints)"]
+        DualViews --> Superset["Apache Superset BI (3 Dashboards · 28 Charts)"]
+        C1 --> Superset
+        DualViews --> FastAPI["FastAPI REST Service (api/main.py · 9 Endpoints)"]
+        Joblib --> FastAPI
     end
 ```
 
