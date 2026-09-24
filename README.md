@@ -238,6 +238,8 @@ The REST API service (`api/main.py`) exposes **9 GET endpoints** for predictive 
 ### Interactive OpenAPI Documentation
 When the service is running, interactive OpenAPI Swagger documentation is available at `http://localhost:8000/docs`.
 
+![FastAPI Interactive OpenAPI Swagger UI](docs/images/api/fastapi_swagger_ui.png)
+
 ---
 
 ## Apache Superset BI Integration (Phase 7 & 9.4)
@@ -245,8 +247,16 @@ When the service is running, interactive OpenAPI Swagger documentation is availa
 Published interactive BI dashboards in Apache Superset 6.1.0 running on `http://localhost:8088`:
 
 1. **Dashboard ID 1: Executive Operations & Predictive SLA Risk** (9 charts, 3 native filters) — `http://localhost:8088/superset/dashboard/1/`
+
+   ![Executive Operations & Predictive SLA Risk Dashboard](docs/images/dashboards/dashboard_1_executive.png)
+
 2. **Dashboard ID 2: Process Performance Analytics** (11 charts, 3 native filters) — `http://localhost:8088/superset/dashboard/2/`
+
+   ![Process Performance Analytics Dashboard](docs/images/dashboards/dashboard_2_process.png)
+
 3. **Dashboard ID 3: Resource & Workload Distribution** (8 charts, 1 native filter) — `http://localhost:8088/superset/dashboard/3/`
+
+   ![Resource & Workload Distribution Dashboard](docs/images/dashboards/dashboard_3_resources.png)
 
 All 28 charts execute cleanly against registered PostgreSQL datasets without SQL errors.
 
