@@ -251,15 +251,15 @@ Published interactive BI dashboards in Apache Superset 6.1.0 running on `http://
 
 1. **Dashboard ID 1: Executive Operations & Predictive SLA Risk** (9 charts, 3 native filters) — `http://localhost:8088/superset/dashboard/1/`
 
-   ![Executive Operations & Predictive SLA Risk Dashboard](docs/images/dashboards/dashboard_1_executive.png)
+![Executive Operations & Predictive SLA Risk Dashboard](docs/images/dashboards/dashboard_1_executive.png)
 
 2. **Dashboard ID 2: Process Performance Analytics** (11 charts, 3 native filters) — `http://localhost:8088/superset/dashboard/2/`
 
-   ![Process Performance Analytics Dashboard](docs/images/dashboards/dashboard_2_process.png)
+![Process Performance Analytics Dashboard](docs/images/dashboards/dashboard_2_process.png)
 
 3. **Dashboard ID 3: Resource & Workload Distribution** (8 charts, 1 native filter) — `http://localhost:8088/superset/dashboard/3/`
 
-   ![Resource & Workload Distribution Dashboard](docs/images/dashboards/dashboard_3_resources.png)
+![Resource & Workload Distribution Dashboard](docs/images/dashboards/dashboard_3_resources.png)
 
 All 28 charts execute cleanly against registered PostgreSQL datasets without SQL errors.
 
