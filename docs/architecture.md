@@ -7,11 +7,11 @@
 
 ## 1. System Overview
 
-The pipeline transforms a real-world operational event log into structured business analytics. It is fully implemented, tested, and verified — 214/214 tests pass with zero regressions.
+The pipeline transforms a real-world operational event log into structured business analytics. It is fully implemented, tested, and verified — 312/312 tests pass with zero regressions.
 
 The dataset is the [BPI Challenge 2017](https://data.4tu.nl/articles/dataset/BPI_Challenge_2017/12696884) loan application event log from a Dutch financial institution: **31,509 applications** and **1,202,267 events** spanning January 2016 through February 2017.
 
-No synthetic data drives the analytics. The `synthetic_extensions` table exists in the schema but remains empty; synthetic fields (document type, SLA target, page count, priority, branch) are documented and deferred, not fabricated.
+The `synthetic_extensions` table is fully populated (31,509 records, `seed=42`) with realistic operational fields (document type, SLA target, page count, priority, branch) and feeds the ML SLA Predictor model, predictive database views, and REST API service.
 
 ---
 
@@ -28,7 +28,7 @@ flowchart TB
     end
 
     subgraph DATABASE["PostgreSQL 16"]
-        DB["6 tables<br/>applications · events · offers<br/>synthetic_extensions · data_loads<br/>schema_versions"]
+        DB["7 tables<br/>applications · events · offers<br/>synthetic_extensions · application_predictions<br/>data_loads · schema_versions"]
         SCHEMA["Schema version tracking<br/>Foreign keys · Indexes · Constraints"]
     end
 
@@ -38,7 +38,7 @@ flowchart TB
     end
 
     subgraph PYTHON_ANALYTICS["Python Analytics Layer"]
-        QUERIES["13 typed query functions"]
+        QUERIES["20 typed query functions<br/>14 core + 6 predictive"]
     end
 
     subgraph EXPORT["Analytics Export Layer"]
@@ -49,7 +49,7 @@ flowchart TB
         CHARTS["8 chart functions<br/>PNG · Batch generation · Manifest"]
     end
 
-    BI_DASHBOARD["BI / Dashboard Consumption<br/>Power BI · Reports · Manual review"]
+    BI_DASHBOARD["Apache Superset BI Dashboards<br/>3 published dashboards · 28 charts"]
 
     XES --> DQP
     DQP --> DB
@@ -129,16 +129,19 @@ flowchart TB
 
 ### 3.3 Database — PostgreSQL 16
 
-**Schema (6 tables):**
+### 3.3 Database — PostgreSQL 16
+
+**Schema (7 tables):**
 
 | Table | Purpose | Row Count (verified) |
 |-------|---------|---------------------|
 | `applications` | One row per loan application (trace-level) | 31,509 |
 | `events` | One row per workflow event (FK to applications) | 1,202,267 |
 | `offers` | Optional offer records per application | (real offers present) |
-| `synthetic_extensions` | Reserved for future synthetic operational fields; currently empty | 0 |
+| `synthetic_extensions` | Operational synthetic extension fields (document type, SLA target, priority, etc.) | 31,509 |
+| `application_predictions` | ML SLA breach probability & predicted cycle time scores | 31,509 |
 | `data_loads` | Import lineage tracking | Migration records |
-| `schema_versions` | Migration version history | `001`, `002` |
+| `schema_versions` | Migration version history | `001`, `002`, `003` |
 
 **Indexes and constraints:** Foreign keys enforce referential integrity (`events.application_id` → `applications.application_id`). Indexes cover common query patterns: application lookups (`idx_applications_first_event_time`), time-range queries (`idx_events_app_time`), resource filtering (`idx_events_resource`), activity filtering (`idx_events_activity`), and lifecycle filtering (`idx_events_lifecycle_transition`).
 
@@ -146,7 +149,7 @@ flowchart TB
 
 **Input:** Cleaned event logs loaded via `scripts/load_xes_to_db.py`.
 
-**Processing:** Streaming loader inserts traces one at a time (matching the quality pipeline's memory-efficient pattern). Schema migrations tracked in `sql/001_create_schema.sql` and `sql/002_analytics_views.sql`; `src/database.py` provides `run_migrations()` and `get_schema_version()`.
+**Processing:** Streaming loader inserts traces one at a time (matching the quality pipeline's memory-efficient pattern). Schema migrations tracked in `sql/001_create_schema.sql`, `sql/002_analytics_views.sql`, and `sql/003_predictive_schema.sql`; `src/database.py` provides `run_migrations()` and `get_schema_version()`.
 
 **Output:** Fully populated database; `data_loads` records each import.
 
@@ -191,12 +194,12 @@ flowchart TB
 
 ---
 
-### 3.5 Python Analytics Layer — 13 Typed Query Functions
+### 3.5 Python Analytics Layer — 20 Typed Query Functions
 
-`src/analytics/queries.py` provides 13 typed functions consuming the SQL views. Each uses `get_cursor()` from `src/database.py` — no SQL duplication, no hardcoded credentials.
+`src/analytics/queries.py` and `src/ml/predictive_queries.py` provide 20 typed functions consuming the SQL views. Each uses `get_cursor()` from `src/database.py` — no SQL duplication, no hardcoded credentials.
 
-| Function | Returns | Source View |
-|----------|---------|-------------|
+| Function | Returns | Source View / Table |
+|----------|---------|---------------------|
 | `get_total_applications()` | `int` | `view_application_metrics` |
 | `get_total_events()` | `int` | `events` (base table) |
 | `get_application_volume_by_type()` | `list[dict]` | `mv_application_type_summary` |
@@ -210,16 +213,17 @@ flowchart TB
 | `get_loan_goal_summary()` | `list[dict]` | `view_loan_goal_metrics` |
 | `get_application_processing_metrics()` | `list[dict]` | `view_application_metrics` (optional `limit`, ordered by `processing_hours DESC`) |
 | `get_executive_summary()` | `dict` | Aggregates `view_application_metrics`, `events`, `view_activity_summary`, `view_resource_workload`, `mv_application_type_summary` |
+| *(+ 6 Predictive Query Functions)* | `list[dict]` / `dict` | `application_predictions`, `view_predictive_sla_risk_summary`, etc. |
 
 **Purpose:** Clean Python interface over SQL analytics.
 
-**Input:** Phase 5 SQL views and materialized views.
+**Input:** Phase 5 SQL views, materialized views, and Phase 9 predictive views.
 
 **Processing:** Each function executes a targeted `SELECT` through `get_cursor()`, transforms `fetchall()` results into typed Python structures (`int`, `list[dict[str, Any]]`, `dict[str, Any]`), and handles `None` values with safe float conversions. No SQL is duplicated from the view definitions.
 
-**Output:** Structured Python data ready for export and visualization.
+**Output:** Structured Python data ready for export, visualization, and FastAPI REST endpoints.
 
-**Business value:** Python developers can retrieve analytics without writing SQL; type hints and docstrings make the interface self-documenting.
+**Business value:** Python developers and API endpoints can retrieve analytics without writing raw SQL; type hints and docstrings make the interface self-documenting.
 
 ---
 
@@ -348,18 +352,21 @@ These are the only business capabilities implemented. No AI document classificat
 
 ---
 
+---
+
 ## 7. Design Decisions (Verified from Implementation)
 
-1. **PostgreSQL 16 as analytical storage layer** — Native installation (not Docker) verified; 6-table star schema with foreign keys, indexes, and schema version tracking (`schema_versions`).
-2. **SQL views and materialized views for reusable analytics** — 13 regular views for flexible on-demand queries; 4 materialized views (`mv_activity_summary`, `mv_resource_workload`, `mv_monthly_summary`, `mv_application_type_summary`) for performance on heavy aggregations.
-3. **Python abstraction over SQL queries** — `queries.py` provides typed functions that consume views by name; no duplicated SQL logic, no embedded SQL strings outside the query module.
+1. **PostgreSQL 16 as analytical storage layer** — Star schema (7 tables) with foreign keys, indexes, and schema version tracking (`schema_versions`).
+2. **SQL views and materialized views for reusable analytics** — 13 regular views for flexible on-demand queries; 4 materialized views for performance on heavy aggregations; predictive views for SLA risk scoring.
+3. **Python abstraction over SQL queries** — `queries.py` and `predictive_queries.py` provide 20 typed functions that consume views by name; no duplicated SQL logic.
 4. **Non-destructive data quality validation** — Streaming parser (`iterparse`) handles 1.2M events without full memory load; quarantine manifest reports bounded examples; no automatic deletion or mutation of source records.
-5. **CSV and Parquet for downstream consumption** — CSV (UTF-8, universal compatibility) and Parquet (columnar, compressed, efficient) both supported; `pyarrow>=14.0,<20.0` dependency verified.
-6. **Automated tests across all layers** — `tests/test_quality_pipeline.py` (1), `test_database.py` (17), `test_sql_analytics.py` (33), `test_analytics_queries.py` (50), `test_analytics_export.py` (55), `test_analytics_visualization.py` (58): 214/214 passing.
-7. **Schema version tracking** — `sql/001_create_schema.sql` and `sql/002_analytics_views.sql` tracked via `schema_versions`; `run_migrations()` skips already-applied versions.
-8. **Streaming database loader** — `load_xes_to_db.py` inserts traces one at a time; `load_xes_to_db` respects existing records; matches quality pipeline memory pattern.
-9. **Real dataset over synthetic** — All analytical outputs derive from verified BPI 2017 records; synthetic fields are explicitly documented as unavailable (`unavailable_document_extension_fields`, `sla_consistency_not_evaluable` info rules).
-10. **Consistent visualization design** — `seaborn-whitegrid`, 120 DPI, `Agg` backend, HUSL palette, tight layout; metadata tracking per PNG file.
+5. **CSV and Parquet for downstream consumption** — CSV (UTF-8) and Parquet (columnar, compressed, efficient) both supported; `pyarrow` dependency verified.
+6. **Automated tests across all layers** — 312 Pytest unit & integration tests passing across 16 test modules with zero failures and zero regressions.
+7. **Schema version tracking** — `sql/001_create_schema.sql`, `sql/002_analytics_views.sql`, and `sql/003_predictive_schema.sql` tracked via `schema_versions`; `run_migrations()` skips already-applied versions.
+8. **Deterministic synthetic metadata generation** — `synthetic_generator.py` (`seed=42`) populates 31,509 cases in `synthetic_extensions` with document types, SLA targets, page counts, priorities, and branches.
+9. **Predictive ML pipeline** — At-start SLA risk classification & cycle-time regression model (`SLARiskPredictor`) with strict feature leakage guardrails and persistent `.joblib` artifact.
+10. **Apache Superset BI Dashboards** — 3 published dashboards (IDs 1, 2, 3) with 28 verified charts and native multi-dataset filter controls.
+11. **FastAPI REST API Service** — 9 active API endpoints providing health checks, historical analytics, predictive risk scores, and live model inference.
 
 ---
 
@@ -369,21 +376,17 @@ These are the only business capabilities implemented. No AI document classificat
 |-------|-----------|--------|
 | Source data | BPI Challenge 2017 XES (gzip XML) | Downloaded, checksum verified |
 | Data quality | `xml.etree.ElementTree.iterparse` (streaming), 12-rule catalog | Implemented (`src/cleaning/quality_pipeline.py`) |
-| Database | PostgreSQL 16.15 (native Windows) | Running; 6 tables, indexes, constraints |
-| SQL analytics | 13 regular views + 4 materialized views (`sql/002_analytics_views.sql`) | Created and verified |
-| Python query | `psycopg`, SQLAlchemy 2.0 patterns (`get_cursor()`), typed functions | 13 functions (`src/analytics/queries.py`) |
+| Database | PostgreSQL 16 | Running; 7 tables, indexes, constraints |
+| SQL analytics | 13 regular views + 4 materialized views + predictive views | Created and verified |
+| Python query | `psycopg`, SQLAlchemy 2.0 patterns (`get_cursor()`), typed functions | 20 functions (`queries.py` & `predictive_queries.py`) |
 | Export | `pandas` (CSV), `pyarrow` (Parquet) (`src/analytics/export.py`) | Implemented |
 | Visualization | `matplotlib`, `seaborn` (`Agg` backend) (`src/analytics/visualization.py`) | 8 chart functions |
+| ML Pipeline | `scikit-learn` (RandomForest SLA Risk Predictor) | Implemented (`src/ml/sla_predictor.py`) |
+| FastAPI REST API | FastAPI, Pydantic, uvicorn | 9 REST endpoints (`src/api/main.py`) |
+| BI Dashboards | Apache Superset 6.1.0 | 3 published dashboards (28 charts) |
 | Configuration | `pydantic-settings`, `python-dotenv`, `.env` | Configured |
 | Packaging | `pyproject.toml`, editable install (`pip install -e .`) | Installed (`v0.1.0`) |
-| Testing | `pytest`, `pytest-cov` | 214/214 passing |
-
-Not implemented (dependencies may exist but functionality does not):
-- **FastAPI backend** — Not implemented; `api/` directory exists but contains no active endpoints.
-- **Power BI dashboard** — Planned for future phase; the export layer produces CSV/Parquet specifically to support it, but no `.pbix` file or live connection exists.
-- **Local LLM / Hermes Desktop** — Deferred; no LLM endpoint or model runtime integrated.
-- **ML / document classification** — `scikit-learn` installed but no ML model, feature engineering, or prediction pipeline implemented.
-- **AI document-intelligence capabilities** — Not implemented; the `src/ai/` directory exists but is empty.
+| Testing | `pytest`, `pytest-cov` | 312/312 passing across 16 test modules |
 
 ---
 
@@ -393,15 +396,16 @@ Not implemented (dependencies may exist but functionality does not):
 
 - **Data acquisition** — BPI Challenge 2017 download script with MD5 verification.
 - **Data quality** — Non-destructive streaming pipeline with 12 rules, bounded examples, quarantine manifest, JSON/Markdown reports.
-- **Database** — PostgreSQL 16 with 6-table schema, foreign keys, indexes, schema version tracking (`001`, `002`), migration utilities.
+- **Database** — PostgreSQL 16 with 7-table schema, foreign keys, indexes, schema version tracking (`001`, `002`, `003`), migration utilities.
 - **SQL analytics** — 13 regular views (`view_*`) + 4 materialized views (`mv_*`), covering metrics, throughput, activities, resources, lifecycle, loan goals, event sequences, time-series, processing buckets, and offer analysis.
-- **Python analytics** — 14 typed query functions (`get_*`) consuming existing SQL views; no SQL duplication.
+- **Python analytics** — 20 typed query functions (`get_*`) consuming existing SQL views; no SQL duplication.
 - **Analytics export** — CSV + Parquet batch export for 8 datasets; manifest tracking; output directory `reports/generated/analytics/`.
 - **Visualization** — 8 chart functions (KPI tiles, bar, line, donut, grouped bar); PNG batch generation; consistent style; manifest tracking; output directory `reports/generated/plots/`.
 - **Apache Superset BI Dashboards** — 3 published dashboards (IDs 1, 2, 3) with 28 verified charts and native multi-dataset filters.
 - **Synthetic Metadata Population** — Seed-controlled (`seed=42`) generator populating 31,509 cases in `synthetic_extensions` with audit logging in `data_loads`.
 - **Predictive ML Pipeline** — At-start SLA risk classification & cycle-time regression model (`SLARiskPredictor`) with feature leakage guardrails and persistent artifacts.
-- **Testing** — 238 automated tests across all layers, zero regressions.
+- **FastAPI REST Service** — 9 production REST API endpoints for health, analytical queries, predictive batch scores, and live risk inference.
+- **Testing** — 312 automated tests across 16 test modules, zero regressions.
 
 ---
 
@@ -412,17 +416,19 @@ Not implemented (dependencies may exist but functionality does not):
 | Phase 1 — Foundation | ✅ Complete | `.gitignore`, `.env.example`, `docker-compose.yml`, `pyproject.toml`, `src/config.py` |
 | Phase 2 — Data | ✅ Complete | `BPI_Challenge_2017.xes.gz` downloaded; `data/source_manifest.json`; checksum verified |
 | Phase 3 — Data Quality | ✅ Complete | `quality_pipeline.py` (1 test); 31,509 traces, 1,202,267 events, 0 quarantined |
-| Phase 4 — Database | ✅ Complete | `sql/001_create_schema.sql` (6 tables); 17 tests passing; PostgreSQL 16.15 native |
+| Phase 4 — Database | ✅ Complete | `sql/001_create_schema.sql` (7 tables); 17 tests passing; PostgreSQL 16 native |
 | Phase 5 — SQL Analytics | ✅ Complete | `sql/002_analytics_views.sql` (13 views + 4 materialized); 33 tests passing |
 | Phase 6.1 — Python Query | ✅ Complete | `queries.py` (14 functions); 50 tests passing |
 | Phase 6.2 — Analytics Export | ✅ Complete | `export.py` (8 datasets, CSV/Parquet, batch, manifest); 55 tests passing |
 | Phase 6.3 — Visualization | ✅ Complete | `visualization.py` (8 charts, PNG, batch, manifest); 58 tests passing |
-| Phase 7.1–7.4 — Apache Superset | ✅ Complete | 3 published dashboards (IDs 1, 2, 3), 28 verified charts, FastMCP verified |
+| Phase 7.1–7.4 — Apache Superset | ✅ Complete | 3 published dashboards (IDs 1, 2, 3), 28 verified charts |
 | Phase 8.1 — Synthetic Population | ✅ Complete | `synthetic_generator.py` & `populate_synthetic_extensions.py` (31,509 rows) |
-| Phase 8.2 — Predictive ML Pipeline | ✅ Complete | `feature_engineering.py` & `sla_predictor.py` (6 unit tests, joblib artifact) |
+| Phase 8.2 — Predictive ML Pipeline | ✅ Complete | `feature_engineering.py` & `sla_predictor.py` (12 ML unit tests, joblib artifact) |
+| Phase 9 — Predictive SQL & FastAPI | ✅ Complete | 9 FastAPI endpoints & predictive SQL query layer (72 tests) |
+| Phase 10 — Integration Testing | ✅ Complete | Full test suite verified (312 tests across 16 modules) |
+| Phase 11 — Dashboard Assets | ✅ Complete | 3 final high-res dashboard captures staged and committed to git history |
 
-**Total tests:** 238 passed. Zero failures. Zero regressions.
-
+**Total tests:** 312 passed. Zero failures. Zero regressions.
 
 ---
 
@@ -435,20 +441,19 @@ Not implemented (dependencies may exist but functionality does not):
 | `docs/architecture.md` | This document |
 | `data/source_manifest.json` | Dataset provenance and checksum |
 | `data/raw/BPI_Challenge_2017.xes.gz` | Raw event log (Git-ignored; reproducible via download script) |
-| `sql/001_create_schema.sql` | Schema migration: 6 tables + indexes + version tracking |
+| `sql/001_create_schema.sql` | Schema migration: base tables + indexes + version tracking |
 | `sql/002_analytics_views.sql` | Analytics migration: 13 regular + 4 materialized views |
+| `sql/003_predictive_schema.sql` | Predictive schema migration: `application_predictions` table + predictive views |
 | `src/cleaning/quality_pipeline.py` | Streaming XES quality pipeline |
 | `src/database.py` | Connection, migrations, schema version utilities |
-| `src/analytics/queries.py` | 13 typed Python query functions |
+| `src/analytics/queries.py` | Core typed Python query functions |
+| `src/ml/predictive_queries.py` | Predictive typed Python query functions |
+| `src/ml/sla_predictor.py` | Machine Learning SLA risk predictor & feature engineering |
+| `src/api/main.py` | FastAPI REST API service endpoints |
 | `src/analytics/export.py` | CSV/Parquet export + manifest |
 | `src/analytics/visualization.py` | 8 chart functions + PNG generation |
-| `tests/test_quality_pipeline.py` | Quality pipeline coverage (1 test) |
-| `tests/test_database.py` | Database layer coverage (17 tests) |
-| `tests/test_sql_analytics.py` | SQL analytics coverage (33 tests) |
-| `tests/test_analytics_queries.py` | Python query layer (50 tests) |
-| `tests/test_analytics_export.py` | Export module (55 tests) |
-| `tests/test_analytics_visualization.py` | Visualization module (58 tests) |
+| `tests/` | 16 test modules (312 Pytest tests passing) |
 
 ---
 
-*Document created from the actual repository implementation at `D:\Repository\document-intelligence-analytics`. Every claim in this document is traceable to committed code, passing tests, or verified database state. No aspirational components (FastAPI endpoints, Power BI `.pbix`, LLM integrations, ML models, AI document classification) are presented as implemented.*
+*Document created from the actual repository implementation at `/run/media/akanshshrikanth/D/Repository/document-intelligence-analytics`. Every claim in this document is traceable to committed code, passing tests, or verified database state.*

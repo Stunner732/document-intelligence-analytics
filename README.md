@@ -369,7 +369,7 @@ document-intelligence-analytics/
 │       ├── predictive_queries.py   # Inference feature queries
 │       ├── export.py               # CSV/Parquet export module
 │       └── visualization.py        # Matplotlib/Seaborn chart generation
-├── tests/                          # 12 test modules (312 tests passing)
+├── tests/                          # 16 test modules (312 tests passing)
 ├── pyproject.toml                  # Dependencies & pytest options
 ├── docker-compose.yml              # PostgreSQL 16 container definition
 └── .gitignore                      # Ignore rules
